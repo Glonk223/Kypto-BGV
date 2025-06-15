@@ -125,6 +125,24 @@ namespace BGV
             x %= Q;
             return x < 0 ? x + Q : x;
         }
+        
+        /// <summary>
+        /// Returns the internal coefficients array (lowest degree first).
+        /// </summary>
+        public BigInteger[] ToBigIntegerArray() => _coeffs.ToArray();
+
+        public override bool Equals(object? obj)
+        {
+            if (obj is not Polynomial p) return false;
+            var a = _coeffs;
+            var b = p._coeffs;
+            if (a.Count != b.Count) return false;
+            for (int i = 0; i < a.Count; i++)
+                if (a[i] != b[i]) return false;
+            return true;
+        }
+
+        public override int GetHashCode() => _coeffs.Aggregate(0, (h, c) => HashCode.Combine(h, c));
 
         public override string ToString()
         {
