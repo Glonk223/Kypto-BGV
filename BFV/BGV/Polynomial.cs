@@ -9,16 +9,20 @@ namespace BGV
     {
         private readonly List<BigInteger> _coeffs;
         public static BigInteger Q { get; private set; }
+        public static BigInteger T { get; private set; }
         public static Polynomial Modulus { get; private set; }
 
         /// <summary>
         /// Set global ring parameters: modulus polynomial and coefficient modulus q.
         /// Must be called before any operations.
         /// </summary>
-        public static void Init(BigInteger q, Polynomial modulus)
+        public static void Init(BigInteger q, BigInteger t,  Polynomial modulus)
         {
             if (q <= 1) throw new ArgumentException("q must be prime > 1");
+            if (t <= 1 || t >= q) throw new ArgumentException("t must satisfy 1 < t < q");
+
             Q = q;
+            T = t;
             Modulus = modulus;
         }
 
@@ -74,11 +78,25 @@ namespace BGV
 
             return new Polynomial(result).ModPolynomial();
         }
-
+        
+        /// <summary>
+        /// Multiply each coefficient by a scalar (e.g. plaintext modulus T).
+        /// </summary>
+        public Polynomial MultiplyScalar(BigInteger scalar)
+        {
+            var result = _coeffs.Select(c => SafeModQ(c * scalar)).ToArray();
+            return new Polynomial(result);
+        }
+        
+        /// <summary>
+        /// Negates polynomial: -this mod q.
+        /// </summary>
+        public Polynomial Negate() => MultiplyScalar(-1);
+        
         /// <summary>
         /// Reduces this polynomial modulo the Modulus polynomial
         /// </summary>
-        private Polynomial ModPolynomial()
+        public Polynomial ModPolynomial()
         {
             if (Modulus == null)
                 return this;

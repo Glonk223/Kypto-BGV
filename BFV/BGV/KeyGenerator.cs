@@ -6,30 +6,20 @@ namespace BGV
     /// <summary>
     /// Represents a BGV key pair containing a secret key, public key (a,b), and error polynomial.
     /// </summary>
+    /// <summary>Key pair with public key expressed as (pk0, pk1=-a).</summary>
     public class KeyPair
     {
-        /// <summary>Secret key polynomial (small error).</summary>
         public Polynomial SecretKey { get; }
-        /// <summary>Public key component a, sampled uniformly.</summary>
-        public Polynomial PublicA { get; }
-        /// <summary>Public key component b = a * sk + e.</summary>
-        public Polynomial PublicB { get; }
-        /// <summary>Error polynomial used in public key generation.</summary>
+        public Polynomial Pk0 { get; }  // = a*s + t*e
+        public Polynomial Pk1 { get; }  // = -a
         public Polynomial Error { get; }
 
-        /// <summary>
-        /// Constructs a new key pair.
-        /// </summary>
-        /// <param name="sk">Secret key polynomial.</param>
-        /// <param name="a">Uniformly sampled polynomial.</param>
-        /// <param name="b">Public key polynomial b = a * sk + e.</param>
-        /// <param name="e">Error polynomial.</param>
-        public KeyPair(Polynomial sk, Polynomial a, Polynomial b, Polynomial e)
+        public KeyPair(Polynomial sk, Polynomial pk0, Polynomial pk1, Polynomial error)
         {
             SecretKey = sk;
-            PublicA = a;
-            PublicB = b;
-            Error = e;
+            Pk0 = pk0;
+            Pk1 = pk1;
+            Error = error;
         }
     }
 
@@ -55,29 +45,41 @@ namespace BGV
                 var val = new BigInteger(buf);
                 coeffs[i] = (val < 0 ? -val : val) % Polynomial.Q;
             }
-            return new Polynomial(coeffs);
+            return new Polynomial(coeffs).ModPolynomial();
         }
 
         /// <summary>
-        /// Samples a "small" error polynomial of degree ≤ <paramref name="maxDegree"/>.
+        /// Samples a "small" error polynomial of degree ≤ <paramref name="degree"/>.
         /// Coefficients are drawn from the set {-1, 0, 1}.
         /// </summary>
-        /// <param name="maxDegree">
+        /// <param name="degree">
         /// Maximum degree of the error polynomial (should match modulus degree).</param>
         /// <returns>A small error polynomial.</returns>
-        public static Polynomial SampleError(int maxDegree)
+        public static Polynomial SampleError(int degree, 
+            double pNeg = 0.001, double pZero = 0.998, double pPos = 0.001)
         {
-            var coeffs = new BigInteger[maxDegree + 1];
-            byte[] buf = new byte[1];
-            for (int i = 0; i <= maxDegree; i++)
+            if (Math.Abs(pNeg + pZero + pPos - 1.0) > 1e-9)
+                throw new ArgumentException("pNeg + pZero + pPos must sum to 1");
+
+            var coeffs = new BigInteger[degree + 1];
+            byte[] buf = new byte[8];
+            for (int i = 0; i <= degree; i++)
             {
+                // 1) wylosuj double u w [0,1)
                 RandomNumberGenerator.Fill(buf);
-                int r = buf[0] % 3; // yields 0,1,2
-                coeffs[i] = r - 1;    // maps to -1,0,1
+                // zamien bajty na UInt64, podziel przez 2^64 → [0,1)
+                var u = (BitConverter.ToUInt64(buf, 0) / (double)ulong.MaxValue);
+
+                // 2) przypisz wartość wg wagi
+                if (u < pNeg)
+                    coeffs[i] = -1;
+                else if (u < pNeg + pZero)
+                    coeffs[i] = 0;
+                else
+                    coeffs[i] = 1;
             }
             return new Polynomial(coeffs);
         }
-
         /// <summary>
         /// Generates a BGV key pair: secret key, public key, and error.
         /// </summary>
@@ -87,10 +89,12 @@ namespace BGV
         public static KeyPair GenerateKeyPair(int modulusDegree)
         {
             var sk = SampleError(modulusDegree);
-            var a = SampleUniform(modulusDegree);
-            var e = SampleError(modulusDegree);
-            var b = a.Multiply(sk).Add(e);
-            return new KeyPair(sk, a, b, e);
+            var a  = SampleUniform(modulusDegree);
+            var e  = SampleError(modulusDegree);
+            var scaledError = e.MultiplyScalar(Polynomial.T);
+            var pk0 = a.Multiply(sk).Add(scaledError).ModPolynomial();  // a*s + t*e
+            var pk1 = a.Negate().ModPolynomial();                       // -a
+            return new KeyPair(sk, pk0, pk1, e);
         }
     }
 
@@ -99,30 +103,54 @@ namespace BGV
     /// </summary>
     public static class KeyGeneratorTests
     {
-        /// <summary>
-        /// Runs all tests and writes results to console.
-        /// </summary>
         public static void RunAll()
         {
             TestKeyRelation();
             Console.WriteLine("All KeyGenerator tests passed.");
         }
-
+        
         /// <summary>
-        /// Verifies that b = a * sk + e holds exactly in the polynomial ring.
+        /// Weryfikuje, że dla wygenerowanego KeyPair zachodzi
+        ///   pk0 = a * s + t * e
+        /// gdzie a = -pk1 (bo pk1 = -a).
         /// </summary>
         private static void TestKeyRelation()
         {
-            int degree = Polynomial.Modulus.Degree;
-            var keyPair = KeyGenerator.GenerateKeyPair(degree);
-            var a = keyPair.PublicA;
-            var b = keyPair.PublicB;
-            var sk = keyPair.SecretKey;
-            var e = keyPair.Error;
+            // musisz wywołać Init przed testem, tak jak w innych testach:
+            BigInteger q = 1031;
+            BigInteger t = 17;
+            var mod = new Polynomial(1, 0, 0, 0, 1);  // przykładowy f(X)
+            Polynomial.Init(q, t, mod);
 
-            var left = a.Multiply(sk).Add(e);
-            if (!left.Equals(b))
-                throw new Exception("Public key relation failed: a*sk + e != b");
+            int deg = mod.Degree;
+            for (int i = 0; i < 100; i++)
+            {
+                // 1) generujemy nową parę kluczy
+                var kp = KeyGenerator.GenerateKeyPair(deg);
+
+                // 2) odtwarzamy a = -pk1
+                var a = kp.Pk1.Negate().ModPolynomial();
+
+                // 3) liczymy rhs = a*s + t*e
+                var rhs = a
+                    .Multiply(kp.SecretKey)
+                    .Add(kp.Error.MultiplyScalar(Polynomial.T))
+                    .ModPolynomial();
+
+                // 4) lhs to po prostu b = pk0
+                var lhs = kp.Pk0;
+
+                if (!lhs.Equals(rhs))
+                {
+                    Console.WriteLine($"--- KeyRelation failed on trial {i} ---");
+                    Console.WriteLine($"a                = {a}");
+                    Console.WriteLine($"s (secret key)   = {kp.SecretKey}");
+                    Console.WriteLine($"e (error)        = {kp.Error}");
+                    Console.WriteLine($"lhs: pk0         = {lhs}");
+                    Console.WriteLine($"rhs: a*s + t*e   = {rhs}");
+                    throw new Exception($"Key relation test failed on trial {i}.");
+                }
+            }
         }
     }
 }
