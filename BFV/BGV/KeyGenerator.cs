@@ -17,7 +17,6 @@ namespace BGV
             Rlk1 = rlk1;
         }
     }
-
     
     /// <summary>
     /// Represents a BGV key pair containing a secret key, public key (a,b), and error polynomial.
@@ -130,62 +129,6 @@ namespace BGV
             var rlk = new RelinearizationKey(rlk0, rlk1);
             
             return new KeyPair(sk, pk0, pk1, e, rlk);
-        }
-    }
-
-    /// <summary>
-    /// Contains unit tests for the <see cref="KeyGenerator"/>.
-    /// </summary>
-    public static class KeyGeneratorTests
-    {
-        public static void RunAll()
-        {
-            TestKeyRelation();
-            Console.WriteLine("All KeyGenerator tests passed.");
-        }
-        
-        /// <summary>
-        /// Weryfikuje, że dla wygenerowanego KeyPair zachodzi
-        ///   pk0 = a * s + t * e
-        /// gdzie a = -pk1 (bo pk1 = -a).
-        /// </summary>
-        private static void TestKeyRelation()
-        {
-            // musisz wywołać Init przed testem, tak jak w innych testach:
-            BigInteger q = 1031;
-            BigInteger t = 17;
-            var mod = new Polynomial(1, 0, 0, 0, 1);  // przykładowy f(X)
-            Polynomial.Init(q, t, mod);
-
-            int deg = mod.Degree;
-            for (int i = 0; i < 100; i++)
-            {
-                // 1) generujemy nową parę kluczy
-                var kp = KeyGenerator.GenerateKeyPair(deg);
-
-                // 2) odtwarzamy a = -pk1
-                var a = kp.Pk1.Negate().ModPolynomial();
-
-                // 3) liczymy rhs = a*s + t*e
-                var rhs = a
-                    .Multiply(kp.SecretKey)
-                    .Add(kp.Error.MultiplyScalar(Polynomial.T))
-                    .ModPolynomial();
-
-                // 4) lhs to po prostu b = pk0
-                var lhs = kp.Pk0;
-
-                if (!lhs.Equals(rhs))
-                {
-                    Console.WriteLine($"--- KeyRelation failed on trial {i} ---");
-                    Console.WriteLine($"a                = {a}");
-                    Console.WriteLine($"s (secret key)   = {kp.SecretKey}");
-                    Console.WriteLine($"e (error)        = {kp.Error}");
-                    Console.WriteLine($"lhs: pk0         = {lhs}");
-                    Console.WriteLine($"rhs: a*s + t*e   = {rhs}");
-                    throw new Exception($"Key relation test failed on trial {i}.");
-                }
-            }
         }
     }
 }

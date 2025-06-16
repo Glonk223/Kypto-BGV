@@ -124,7 +124,7 @@ namespace BGV
         /// Ensures all coefficients are in [0, Q)
         /// and trims leading zeros
         /// </summary>
-        private void Normalize()
+        public void Normalize()
         {
             for (int i = 0; i < _coeffs.Count; i++)
                 _coeffs[i] = SafeModQ(_coeffs[i]);
@@ -137,7 +137,7 @@ namespace BGV
             }
         }
 
-        private static BigInteger SafeModQ(BigInteger x)
+        public static BigInteger SafeModQ(BigInteger x)
         {
             if (Q == 0) return x;  // Q not initialized yet
             x %= Q;
