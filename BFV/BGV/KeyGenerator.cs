@@ -4,6 +4,22 @@ using System.Security.Cryptography;
 namespace BGV
 {
     /// <summary>
+    /// Holds the relinearization key encrypting s^2 under secret s.
+    /// Represents a ciphertext (rlk0, rlk1) such that rlk0 + rlk1 * s = s^2 (mod q, f).
+    /// </summary>
+    public class RelinearizationKey
+    {
+        public Polynomial Rlk0 { get; }
+        public Polynomial Rlk1 { get; }
+        public RelinearizationKey(Polynomial rlk0, Polynomial rlk1)
+        {
+            Rlk0 = rlk0;
+            Rlk1 = rlk1;
+        }
+    }
+
+    
+    /// <summary>
     /// Represents a BGV key pair containing a secret key, public key (a,b), and error polynomial.
     /// </summary>
     /// <summary>Key pair with public key expressed as (pk0, pk1=-a).</summary>
@@ -13,13 +29,16 @@ namespace BGV
         public Polynomial Pk0 { get; }  // = a*s + t*e
         public Polynomial Pk1 { get; }  // = -a
         public Polynomial Error { get; }
-
-        public KeyPair(Polynomial sk, Polynomial pk0, Polynomial pk1, Polynomial error)
+        
+        public RelinearizationKey RelinKey { get; }
+        
+        public KeyPair(Polynomial sk, Polynomial pk0, Polynomial pk1, Polynomial error, RelinearizationKey rlk)
         {
             SecretKey = sk;
             Pk0 = pk0;
             Pk1 = pk1;
             Error = error;
+            RelinKey = rlk;
         }
     }
 
@@ -94,7 +113,23 @@ namespace BGV
             var scaledError = e.MultiplyScalar(Polynomial.T);
             var pk0 = a.Multiply(sk).Add(scaledError).ModPolynomial();  // a*s + t*e
             var pk1 = a.Negate().ModPolynomial();                       // -a
-            return new KeyPair(sk, pk0, pk1, e);
+            
+            // Build relinearization key for s^2
+            // Compute s^2
+            var s2 = sk.Multiply(sk).ModPolynomial();
+            // Sample fresh randomness for relin key
+            var a2 = SampleUniform(modulusDegree);
+            var e2 = SampleError(modulusDegree);
+            // rlk0 = a2*s + t*e2 + s2
+            var rlk0 = a2.Multiply(sk)
+                .Add(e2.MultiplyScalar(Polynomial.T))
+                .Add(s2)
+                .ModPolynomial();
+            // rlk1 = -a2
+            var rlk1 = a2.Negate().ModPolynomial();
+            var rlk = new RelinearizationKey(rlk0, rlk1);
+            
+            return new KeyPair(sk, pk0, pk1, e, rlk);
         }
     }
 
