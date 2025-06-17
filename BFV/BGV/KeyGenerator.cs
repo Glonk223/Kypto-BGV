@@ -4,19 +4,22 @@ using System.Security.Cryptography;
 namespace BGV
 {
     /// <summary>
-    /// Holds the relinearization key encrypting s^2 under secret s.
-    /// Represents a ciphertext (rlk0, rlk1) such that rlk0 + rlk1 * s = s^2 (mod q, f).
+    /// Represents the relinearization key as a vector of key-switching pairs.
     /// </summary>
     public class RelinearizationKey
     {
-        public Polynomial Rlk0 { get; }
-        public Polynomial Rlk1 { get; }
-        public RelinearizationKey(Polynomial rlk0, Polynomial rlk1)
+        public IReadOnlyList<Polynomial> Rlk0 { get; }
+        public IReadOnlyList<Polynomial> Rlk1 { get; }
+
+        public RelinearizationKey(List<Polynomial> rlk0, List<Polynomial> rlk1)
         {
+            if (rlk0.Count != rlk1.Count)
+                throw new ArgumentException("Mismatched RelinearizationKey lengths");
             Rlk0 = rlk0;
             Rlk1 = rlk1;
         }
     }
+
     
     /// <summary>
     /// Represents a BGV key pair containing a secret key, public key (a,b), and error polynomial.
@@ -46,6 +49,10 @@ namespace BGV
     /// </summary>
     public static class KeyGenerator
     {
+        public static BigInteger GadgetBase = 1 << 20; // e.g. 2^20
+        public static int GadgetLength =>
+            (int)Math.Ceiling(Math.Log((double)Polynomial.Q, (double)GadgetBase));
+        
         /// <summary>
         /// Samples a polynomial of degree ≤ <paramref name="maxDegree"/> with coefficients
         /// uniformly random in [0, Q).
@@ -74,7 +81,7 @@ namespace BGV
         /// Maximum degree of the error polynomial (should match modulus degree).</param>
         /// <returns>A small error polynomial.</returns>
         public static Polynomial SampleError(int degree, 
-            double pNeg = 0.001, double pZero = 0.998, double pPos = 0.001)
+            double pNeg = 0.075, double pZero = 0.85, double pPos = 0.075)
         {
             if (Math.Abs(pNeg + pZero + pPos - 1.0) > 1e-9)
                 throw new ArgumentException("pNeg + pZero + pPos must sum to 1");
@@ -116,18 +123,27 @@ namespace BGV
             // Build relinearization key for s^2
             // Compute s^2
             var s2 = sk.Multiply(sk).ModPolynomial();
-            // Sample fresh randomness for relin key
-            var a2 = SampleUniform(modulusDegree);
-            var e2 = SampleError(modulusDegree);
-            // rlk0 = a2*s + t*e2 + s2
-            var rlk0 = a2.Multiply(sk)
-                .Add(e2.MultiplyScalar(Polynomial.T))
-                .Add(s2)
-                .ModPolynomial();
-            // rlk1 = -a2
-            var rlk1 = a2.Negate().ModPolynomial();
+            // Decompose s2 into gadget digits
+            var s2_decomp = Utils.Decompose(s2, GadgetBase, GadgetLength);
+
+            var rlk0 = new List<Polynomial>();
+            var rlk1 = new List<Polynomial>();
+            // For each gadget digit, generate KS keys
+            foreach (var s2j in s2_decomp)
+            {
+                var a_j = SampleUniform(modulusDegree);
+                var e_j = SampleError(modulusDegree);
+                // rlk0_j = a_j * sk + t*e_j + s2_j
+                var r0 = a_j.Multiply(sk)
+                    .Add(e_j.MultiplyScalar(Polynomial.T))
+                    .Add(s2j)
+                    .ModPolynomial();
+                // rlk1_j = -a_j
+                var r1 = a_j.Negate().ModPolynomial();
+                rlk0.Add(r0);
+                rlk1.Add(r1);
+            }
             var rlk = new RelinearizationKey(rlk0, rlk1);
-            
             return new KeyPair(sk, pk0, pk1, e, rlk);
         }
     }
