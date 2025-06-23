@@ -46,32 +46,6 @@ namespace BGV
         /// Degree of the polynomial
         /// </summary>
         public int Degree => _coeffs.Count - 1;
-        
-        /// <summary>
-        /// Generuje losowy wielomian o losowym stopniu ≤ maxDegree w pierścieniu R_q
-        /// </summary>
-        /// <param name="maxDegree">Maksymalny stopień (N)</param>
-        /// <param name="q">Moduł q</param>
-        /// <returns>nowy losowy wielomian</returns>
-        public static Polynomial Random(int maxDegree, BigInteger q)
-        {
-            using var rng = RandomNumberGenerator.Create();
-            // Wybierz losowy stopień od 1 do maxDegree
-            byte[] degreeBytes = new byte[4];
-            rng.GetBytes(degreeBytes);
-            int degree = Math.Abs(BitConverter.ToInt32(degreeBytes, 0)) % maxDegree + 1;
-
-            var coeffs = new BigInteger[degree];
-            int byteSize = q.GetByteCount();
-            for (int i = 0; i < degree; i++)
-            {
-                byte[] bytes = new byte[byteSize + 1];
-                rng.GetBytes(bytes);
-                var val = new BigInteger(bytes);
-                coeffs[i] = (val % q + q) % q;
-            }
-            return new Polynomial(coeffs);
-        }
 
         /// <summary>
         /// Adds two polynomials in the ring

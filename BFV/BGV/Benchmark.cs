@@ -29,14 +29,6 @@ namespace BGV
 
     public static class Benchmark
     {
-        /// <summary>
-        /// Przeprowadza benchmark BGV przy zadanych parametrach i zwraca wyniki.
-        /// </summary>
-        /// <param name="modulusDegree">Stopień wielomianu pierścienia</param>
-        /// <param name="q">Moduł q</param>
-        /// <param name="t">Moduł t</param>
-        /// <param name="modulusPoly">Wielomian nieskracalny (f(X))</param>
-        /// <param name="iterations">Liczba iteracji dla każdej operacji</param>
         public static BenchmarkResult Run(
             int modulusDegree,
             BigInteger q,
@@ -44,7 +36,6 @@ namespace BGV
             Polynomial modulusPoly,
             int iterations = 10)
         {
-            // Zainicjalizuj parametry pierścienia
             Polynomial.Init(q, t, modulusPoly);
 
             var sw = new Stopwatch();
@@ -65,7 +56,6 @@ namespace BGV
             sw.Stop();
             res.KeyGenTime = TimeSpan.FromTicks(sw.ElapsedTicks / iterations);
 
-            // Przygotuj prosty komunikat
             var m = new Polynomial(1, 2, 3).ModPolynomial();
 
             // 2) Encrypt
@@ -87,7 +77,7 @@ namespace BGV
             sw.Stop();
             res.DecryptTime = TimeSpan.FromTicks(sw.ElapsedTicks / iterations);
 
-            // 4) Add homomorficznie
+            // 4) Add
             var ct2 = Encryptor.Encrypt(m, kp);
             sw.Restart();
             for (int i = 0; i < iterations; i++)
@@ -97,7 +87,7 @@ namespace BGV
             sw.Stop();
             res.AddTime = TimeSpan.FromTicks(sw.ElapsedTicks / iterations);
 
-            // 5) Multiply homomorficznie
+            // 5) Multiply
             sw.Restart();
             for (int i = 0; i < iterations; i++)
             {
@@ -109,12 +99,6 @@ namespace BGV
             return res;
         }
         
-        /// <summary>
-        /// Przeprowadza serię benchmarków dla różnych parametrów i zwraca wyniki.
-        /// </summary>
-        /// <param name="parameterSets">
-        /// Lista trójek: (modulusDegree, q, t, iterations).
-        /// </param>
         public static List<BenchmarkResult> Sweep(
             IEnumerable<(int modulusDegree, BigInteger q, BigInteger t, int iterations)> parameterSets,
             Polynomial modulusTemplate = null!)
@@ -122,11 +106,9 @@ namespace BGV
             var results = new List<BenchmarkResult>();
             foreach (var (modulusDegree, q, t, iterations) in parameterSets)
             {
-                // Przygotuj wielomian f(X) = X^N + 1 (lub inny, podany przez użytkownika)
                 Polynomial f;
                 if (modulusTemplate != null)
                 {
-                    // zakładamy, że template ma odpowiedni stopień
                     f = modulusTemplate;
                 }
                 else
@@ -145,10 +127,7 @@ namespace BGV
 
             return results;
         }
-
-        /// <summary>
-        /// Zapisuje wyniki benchmarku do pliku CSV.
-        /// </summary>
+        
         public static void ToCsv(
             this IEnumerable<BenchmarkResult> results,
             string path)

@@ -4,14 +4,6 @@ namespace BGV;
 
 public class DepthTest
 {
-        /// <summary>
-    /// Testuje maksymalną liczbę kolejnych mnożeń (głębokość)
-    /// dla podanego łańcucha modułów Qchain.
-    /// </summary>
-    /// <param name="mPlain">plaintext jako Polynomial (np. m=1)</param>
-    /// <param name="kpInitial">klucze wygenerowane pod Qchain[0]</param>
-    /// <param name="Qchain">tablica modułów, malejąca kolejność</param>
-    /// <returns>liczba poprawnych mnożeń przed przekroczeniem szumu</returns>
     public static int TestMultiplicativeDepth(
         Polynomial mPlain,
         KeyPair kpInitial,
@@ -32,8 +24,6 @@ public class DepthTest
             ctA = Evaluator.ModulusSwitch(ctA, newQ);
             ctB = Evaluator.ModulusSwitch(ctB, newQ);
 
-
-            // 3) Wykonuj mnożenia dopóki odszyfrowanie zwraca poprawny mPlain
             while (true)
             { 
                 ctA = Evaluator.Multiply(ctA, ctB, kp);

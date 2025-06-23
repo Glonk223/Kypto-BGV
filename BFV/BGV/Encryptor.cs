@@ -11,9 +11,6 @@ namespace BGV
 
     public static class Encryptor
     {
-        /// <summary>
-        /// Encrypts a plaintext polynomial m using classic BGV: c0 = b*r + t*e1 + m, c1 = a*r + t*e2.
-        /// </summary>
         public static Ciphertext Encrypt(Polynomial m, KeyPair kp)
         {
             int deg = Polynomial.Modulus.Degree;
@@ -29,10 +26,7 @@ namespace BGV
                 .ModPolynomial();
             return new Ciphertext(c0, c1);
         }
-
-        /// <summary>
-        /// Decrypts a ciphertext: v = c0 - s*c1 (mod q), then reduce coefficients modulo t.
-        /// </summary>
+        
         public static Polynomial Decrypt(Ciphertext ct, Polynomial sk)
         {
             var prod = ct.C1.Multiply(sk);
